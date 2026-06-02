@@ -8,23 +8,23 @@ flowchart TD
   B --> C["do-while 메뉴 루프"]
   C --> D["print_menu()"]
   D --> E["read_int('선택 > ', 0, 8)"]
-  E --> F{choice}
+  E --> F{"choice"}
 
   F -->|1| G["input_courses_manual()"]
   F -->|2| H["read_line(CSV 파일명)"]
   H --> I["load_courses_from_csv(filename)"]
   F -->|3| J["create_sample_csv()"]
   J --> K["load_courses_from_csv('sample_courses.csv')"]
-  F -->|4| L{course_count == 0?}
+  F -->|4| L{"course_count == 0?"}
   L -->|예| M["입력된 강의 없음 안내"]
   L -->|아니오| N["print_course_list()"]
 
-  F -->|5, 6, 7| O{course_count == 0?}
+  F -->|5, 6, 7| O{"course_count == 0?"}
   O -->|예| P["먼저 강의 입력/로드 안내"]
   O -->|아니오| Q["read_int(최대 학점)"]
   Q --> R["run_single_mode(choice - 4, max_credit)"]
 
-  F -->|8| S{course_count == 0?}
+  F -->|8| S{"course_count == 0?"}
   S -->|예| T["먼저 강의 입력/로드 안내"]
   S -->|아니오| U["read_int(최대 학점)"]
   U --> V["run_all_modes(max_credit)"]
@@ -52,4 +52,3 @@ flowchart TD
 - `5`-`7`: 모드 하나를 선택해 시간표를 생성합니다.
 - `8`: 세 가지 모드를 모두 생성합니다.
 - `0`: 프로그램을 종료합니다.
-

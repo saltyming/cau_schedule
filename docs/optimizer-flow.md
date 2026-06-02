@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TD
   A["run_single_mode() 또는 run_all_modes()"] --> B["generate(mode, max_credit, &result)"]
-  B --> C{mode}
+  B --> C{"mode"}
 
   C -->|1| D["optimize_free_day()"]
   C -->|2| E["optimize_no_first_period()"]
@@ -21,34 +21,34 @@ flowchart TD
 
   J --> K["탐색 상태 초기화<br/>g_found, g_max_credit, g_score_fn, g_filter_fn"]
   K --> L["필수 과목을 cur Schedule에 먼저 추가"]
-  L --> M{필수 과목 수 > MAX_SELECTED?}
+  L --> M{"필수 과목 수 > MAX_SELECTED?"}
   M -->|예| N["경고 출력 후 실패 반환"]
   M -->|아니오| O["check_conflict(&cur)"]
-  O --> P{필수 과목끼리 충돌?}
+  O --> P{"필수 과목끼리 충돌?"}
   P -->|예| Q["충돌 과목 안내 후 실패 반환"]
-  P -->|아니오| R{필수 과목 학점 > max_credit?}
+  P -->|아니오| R{"필수 과목 학점 > max_credit?"}
   R -->|예| S["학점 한도 초과 안내 후 실패 반환"]
   R -->|아니오| T["backtrack(&cur, 0)"]
 
   T --> U["현재 Schedule이 필수 과목 포함 + 모드 조건 만족인지 검사"]
-  U --> V{조건 만족?}
+  U --> V{"조건 만족?"}
   V -->|예| W["점수 계산 후 g_best 갱신"]
   V -->|아니오| X["다음 후보 탐색"]
   W --> X
 
-  X --> Y{cur.count >= MAX_SELECTED?}
+  X --> Y{"cur.count >= MAX_SELECTED?"}
   Y -->|예| Z["더 이상 추가하지 않고 반환"]
   Y -->|아니오| AA["남은 강의를 하나씩 후보로 확인"]
-  AA --> AB{학점 한도 초과?}
+  AA --> AB{"학점 한도 초과?"}
   AB -->|예| AA
-  AB -->|아니오| AC{can_add() 통과?}
+  AB -->|아니오| AC{"can_add() 통과?"}
   AC -->|아니오| AA
   AC -->|예| AD["강의 추가"]
   AD --> AE["backtrack(cur, 다음 인덱스)"]
   AE --> AF["강의 제거"]
   AF --> AA
 
-  T --> AG{g_found?}
+  T --> AG{"g_found?"}
   AG -->|아니오| AH["실패 반환"]
   AG -->|예| AI["result = g_best"]
   AI --> AJ["compute_stats(result)"]
@@ -72,4 +72,3 @@ flowchart LR
   M3 --> S3["score_credit_then_rating<br/>총 학점 -> 평균 평점"]
   M3 --> F3["filter_always<br/>추가 조건 없음"]
 ```
-
