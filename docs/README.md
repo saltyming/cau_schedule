@@ -8,7 +8,7 @@
 - [main-menu-flow.md](main-menu-flow.md): `main()`에서 시작되는 메뉴 처리 흐름
 - [optimizer-flow.md](optimizer-flow.md): 시간표 최적화와 백트래킹 흐름
 - [data-and-output-flow.md](data-and-output-flow.md): 강의 데이터, 시간표 데이터, 출력 파일 흐름
-- [build-flow.md](build-flow.md): `Makefile` 기준 빌드 구조
+- [build-flow.md](build-flow.md): `Makefile`·CMake 빌드 구조
 
 ## 보는 방법
 

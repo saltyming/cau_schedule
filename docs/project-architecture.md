@@ -12,6 +12,7 @@ flowchart LR
   export["export.c / export.h<br/>CSV 결과 저장"]
 
   main --> course
+  main --> schedule
   main --> optimizer
   main --> display
   main --> export

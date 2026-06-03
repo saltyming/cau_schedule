@@ -16,13 +16,19 @@ flowchart TD
   F --> H["Schedule.total_credit"]
   F --> I["Schedule.avg_rating"]
 
-  G --> J["display_summary()"]
+  G --> J["display_summary()<br/>count_free_days · has_period_1"]
   H --> J
   I --> J
 
-  G --> K["save_schedules_csv()"]
+  G --> K["save_schedules_csv()<br/>course_at · has_period_1"]
   H --> K
   I --> K
+
+  %% display·export는 요약값뿐 아니라 indices[]·course_list를 직접 참조함
+  C --> J
+  C --> K
+  F --> J
+  F --> K
 
   J --> L["콘솔 요약 출력"]
   K --> M["result_schedules.csv"]
@@ -33,9 +39,9 @@ flowchart TD
 ```mermaid
 classDiagram
   class Course {
-    char name
-    char professor
-    int days
+    char name[MAX_NAME_LEN]
+    char professor[MAX_PROF_LEN]
+    int days[MAX_DAYS]
     int day_count
     int start_period
     int end_period
@@ -45,7 +51,7 @@ classDiagram
   }
 
   class Schedule {
-    int indices
+    int indices[MAX_SELECTED]
     int count
     int total_credit
     float avg_rating

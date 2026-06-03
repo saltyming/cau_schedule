@@ -23,12 +23,13 @@ flowchart TD
   K --> L["필수 과목을 cur Schedule에 먼저 추가"]
   L --> M{"필수 과목 수 > MAX_SELECTED?"}
   M -->|예| N["경고 출력 후 실패 반환"]
-  M -->|아니오| O["check_conflict(&cur)"]
+  M -->|아니오| O["check_conflict(&cur, &ci, &cj)"]
   O --> P{"필수 과목끼리 충돌?"}
   P -->|예| Q["충돌 과목 안내 후 실패 반환"]
   P -->|아니오| R{"필수 과목 학점 > max_credit?"}
   R -->|예| S["학점 한도 초과 안내 후 실패 반환"]
-  R -->|아니오| T["backtrack(&cur, 0)"]
+  R -->|아니오| RW["선택 과목 > SEARCH_WARN_THRESHOLD(25)?<br/>예: 탐색 지연 경고 출력"]
+  RW --> T["backtrack(&cur, 0)"]
 
   T --> U["현재 Schedule이 필수 과목 포함 + 모드 조건 만족인지 검사"]
   U --> V{"조건 만족?"}

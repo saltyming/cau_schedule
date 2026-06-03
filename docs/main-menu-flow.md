@@ -4,7 +4,8 @@
 
 ```mermaid
 flowchart TD
-  A["main()"] --> B["print_banner()"]
+  A["main()"] --> A0["enable_utf8_console()<br/>(윈도우 콘솔 UTF-8)"]
+  A0 --> B["print_banner()"]
   B --> C["do-while 메뉴 루프"]
   C --> D["print_menu()"]
   D --> E["read_int('선택 > ', 0, 8)"]
