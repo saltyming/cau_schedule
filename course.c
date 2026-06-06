@@ -181,6 +181,118 @@ static void parse_days_into(Course *c, const char *day_text) {
     }
 }
 
+/**
+ UTF-8 코드 포인트 하나가 터미널에서 차지하는 표시 폭을 구합니다.
+
+ printf의 폭 지정자는 바이트 수를 기준으로 동작해 한글 열이 밀리므로,
+ 강의 목록 표에서는 화면에 보이는 칸 수를 직접 계산합니다.
+ */
+static int codepoint_display_width(unsigned int cp) {
+    if (cp == 0 || cp < 32 || (cp >= 0x7F && cp < 0xA0)) return 0;
+
+    if ((cp >= 0x1100 && cp <= 0x115F) ||
+        (cp >= 0x2329 && cp <= 0x232A) ||
+        (cp >= 0x2E80 && cp <= 0xA4CF && cp != 0x303F) ||
+        (cp >= 0xAC00 && cp <= 0xD7A3) ||
+        (cp >= 0xF900 && cp <= 0xFAFF) ||
+        (cp >= 0xFE10 && cp <= 0xFE19) ||
+        (cp >= 0xFE30 && cp <= 0xFE6F) ||
+        (cp >= 0xFF00 && cp <= 0xFF60) ||
+        (cp >= 0xFFE0 && cp <= 0xFFE6)) {
+        return 2;
+    }
+
+    return 1;
+}
+
+static unsigned int next_utf8_codepoint(const char **s) {
+    const unsigned char *p = (const unsigned char *)*s;
+
+    if (p[0] < 0x80) {
+        *s += 1;
+        return p[0];
+    }
+
+    if ((p[0] & 0xE0) == 0xC0 &&
+        p[1] != '\0' &&
+        (p[1] & 0xC0) == 0x80) {
+        *s += 2;
+        return ((unsigned int)(p[0] & 0x1F) << 6) |
+               (unsigned int)(p[1] & 0x3F);
+    }
+
+    if ((p[0] & 0xF0) == 0xE0 &&
+        p[1] != '\0' &&
+        p[2] != '\0' &&
+        (p[1] & 0xC0) == 0x80 &&
+        (p[2] & 0xC0) == 0x80) {
+        *s += 3;
+        return ((unsigned int)(p[0] & 0x0F) << 12) |
+               ((unsigned int)(p[1] & 0x3F) << 6) |
+               (unsigned int)(p[2] & 0x3F);
+    }
+
+    if ((p[0] & 0xF8) == 0xF0 &&
+        p[1] != '\0' &&
+        p[2] != '\0' &&
+        p[3] != '\0' &&
+        (p[1] & 0xC0) == 0x80 &&
+        (p[2] & 0xC0) == 0x80 &&
+        (p[3] & 0xC0) == 0x80) {
+        *s += 4;
+        return ((unsigned int)(p[0] & 0x07) << 18) |
+               ((unsigned int)(p[1] & 0x3F) << 12) |
+               ((unsigned int)(p[2] & 0x3F) << 6) |
+               (unsigned int)(p[3] & 0x3F);
+    }
+
+    *s += 1;
+    return p[0];
+}
+
+static int display_width(const char *s) {
+    int width = 0;
+    while (*s) {
+        unsigned int cp = next_utf8_codepoint(&s);
+        width += codepoint_display_width(cp);
+    }
+    return width;
+}
+
+static int max_int(int a, int b) {
+    return (a > b) ? a : b;
+}
+
+static void print_padding(int count) {
+    for (int i = 0; i < count; i++) putchar(' ');
+}
+
+static void print_cell(const char *text, int width, int right_align) {
+    int padding = width - display_width(text);
+    if (padding < 0) padding = 0;
+
+    if (right_align) print_padding(padding);
+    fputs(text, stdout);
+    if (!right_align) print_padding(padding);
+}
+
+static void print_rule_cell(int width) {
+    for (int i = 0; i < width; i++) putchar('-');
+}
+
+static void print_course_days(const Course *c, char *buf, size_t buf_size) {
+    if (buf_size == 0) return;
+
+    buf[0] = '\0';
+    for (int d = 0; d < c->day_count; d++) {
+        const char *day = day_to_str(c->days[d]);
+        size_t used = strlen(buf);
+        size_t day_len = strlen(day);
+        if (used + day_len >= buf_size) break;
+        strcat(buf, day);
+    }
+}
+
 // MARK: - 강의 직접 입력
 
 /**
@@ -360,24 +472,74 @@ int load_courses_from_csv(const char *filename) {
  현재까지 입력된 모든 강의를 표 형태로 화면에 보여 줍니다.
  */
 void print_course_list(void) {
-    printf("\n%-4s %-20s %-12s %-8s %5s %5s %5s %5s %6s\n",
-           "No", "강의명", "교수명", "요일", "시작", "종료", "학점", "평점", "필수");
-    printf("%-4s %-20s %-12s %-8s %5s %5s %5s %5s %6s\n",
-           "──", "──────────────────", "──────────", "──────", "──", "──", "──", "──", "──");
+    int no_width = 4;
+    int name_width = 20;
+    int professor_width = 12;
+    int day_width = 8;
+    int number_width = 5;
+    int required_width = 6;
+
+    for (int i = 0; i < course_count; i++) {
+        Course *c = &course_list[i];
+
+        char day_str[20];
+        print_course_days(c, day_str, sizeof(day_str));
+
+        name_width = max_int(name_width, display_width(c->name));
+        professor_width = max_int(professor_width, display_width(c->professor));
+        day_width = max_int(day_width, display_width(day_str));
+        required_width = max_int(required_width,
+                                 display_width(c->is_required ? "✔필수" : "선택"));
+    }
+
+    printf("\n");
+    print_cell("No", no_width, 0);           putchar(' ');
+    print_cell("강의명", name_width, 0);     putchar(' ');
+    print_cell("교수명", professor_width, 0); putchar(' ');
+    print_cell("요일", day_width, 0);        putchar(' ');
+    print_cell("시작", number_width, 1);     putchar(' ');
+    print_cell("종료", number_width, 1);     putchar(' ');
+    print_cell("학점", number_width, 1);     putchar(' ');
+    print_cell("평점", number_width, 1);     putchar(' ');
+    print_cell("필수", required_width, 1);   putchar('\n');
+
+    print_rule_cell(no_width);        putchar(' ');
+    print_rule_cell(name_width);      putchar(' ');
+    print_rule_cell(professor_width); putchar(' ');
+    print_rule_cell(day_width);       putchar(' ');
+    print_rule_cell(number_width);    putchar(' ');
+    print_rule_cell(number_width);    putchar(' ');
+    print_rule_cell(number_width);    putchar(' ');
+    print_rule_cell(number_width);    putchar(' ');
+    print_rule_cell(required_width);  putchar('\n');
 
     for (int i = 0; i < course_count; i++) {
         Course *c = &course_list[i];
 
         // 요일 인덱스들을 "월수" 같은 사람이 읽는 글자로 이어 붙입니다.
-        char day_str[20] = "";
-        for (int d = 0; d < c->day_count; d++) {
-            strcat(day_str, day_to_str(c->days[d]));
-        }
+        char day_str[20];
+        char no_text[16];
+        char start_text[16];
+        char end_text[16];
+        char credit_text[16];
+        char rating_text[16];
 
-        printf("%-4d %-20s %-12s %-8s %5d %5d %5d %5.1f %6s\n",
-               i + 1, c->name, c->professor, day_str,
-               c->start_period, c->end_period,
-               c->credit, c->rating,
-               c->is_required ? "✔필수" : "선택");
+        print_course_days(c, day_str, sizeof(day_str));
+        snprintf(no_text, sizeof(no_text), "%d", i + 1);
+        snprintf(start_text, sizeof(start_text), "%d", c->start_period);
+        snprintf(end_text, sizeof(end_text), "%d", c->end_period);
+        snprintf(credit_text, sizeof(credit_text), "%d", c->credit);
+        snprintf(rating_text, sizeof(rating_text), "%.1f", c->rating);
+
+        print_cell(no_text, no_width, 0);                    putchar(' ');
+        print_cell(c->name, name_width, 0);                  putchar(' ');
+        print_cell(c->professor, professor_width, 0);        putchar(' ');
+        print_cell(day_str, day_width, 0);                   putchar(' ');
+        print_cell(start_text, number_width, 1);             putchar(' ');
+        print_cell(end_text, number_width, 1);               putchar(' ');
+        print_cell(credit_text, number_width, 1);            putchar(' ');
+        print_cell(rating_text, number_width, 1);            putchar(' ');
+        print_cell(c->is_required ? "✔필수" : "선택", required_width, 1);
+        putchar('\n');
     }
 }
