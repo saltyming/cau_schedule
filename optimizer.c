@@ -4,24 +4,6 @@
 
 #define SEARCH_WARN_THRESHOLD   25
 
-typedef struct {
-    double key[3];
-    int    len;
-} Score;
-
-typedef Score (*ScoreFn)(const Schedule *);
-
-typedef int   (*FilterFn)(const Schedule *);
-
-static int score_better(const Score *a, const Score *b) {
-    int n = (a->len < b->len) ? a->len : b->len;
-    for (int i = 0; i < n; i++) {
-        if (a->key[i] > b->key[i]) return 1;
-        if (a->key[i] < b->key[i]) return 0;
-    }
-    return 0;
-}
-
 static double schedule_rating_sum(const Schedule *s) {
     double sum = 0.0;
     for (int i = 0; i < s->count; i++) {
@@ -34,34 +16,62 @@ static double schedule_avg_rating(const Schedule *s) {
     return (s->count > 0) ? schedule_rating_sum(s) / s->count : 0.0;
 }
 
-static Schedule g_best;
-static Score    g_best_score;
-static int      g_found;
-static int      g_max_credit;
-static ScoreFn  g_score_fn;
-static FilterFn g_filter_fn;
-
 static int has_all_required(const Schedule *s) {
     for (int i = 0; i < course_count; i++) {
         if (!course_list[i].is_required) continue;
 
         int found = 0;
         for (int j = 0; j < s->count; j++) {
-            if (s->indices[j] == i) { found = 1; break; }
+            if (s->indices[j] == i) {
+                found = 1;
+                break;
+            }
         }
         if (!found) return 0;
     }
     return 1;
 }
 
-static void backtrack(Schedule *cur, int start_idx) {
+static int meets_mode_condition(const Schedule *s, int mode) {
+    if (mode == 1) {
+        return count_free_days(s) >= 1;
+    }
+    if (mode == 2) {
+        return !has_period_1(s);
+    }
+    return 1;
+}
 
-    if (has_all_required(cur) && g_filter_fn(cur)) {
-        Score sc = g_score_fn(cur);
-        if (!g_found || score_better(&sc, &g_best_score)) {
-            g_found      = 1;
-            g_best_score = sc;
-            g_best       = *cur;
+static int is_better_schedule(const Schedule *candidate,
+                              const Schedule *best,
+                              int mode,
+                              int found_best) {
+    if (!found_best) return 1;
+
+    if (mode == 1) {
+        int candidate_free_days = count_free_days(candidate);
+        int best_free_days = count_free_days(best);
+
+        if (candidate_free_days > best_free_days) return 1;
+        if (candidate_free_days < best_free_days) return 0;
+    }
+
+    if (candidate->total_credit > best->total_credit) return 1;
+    if (candidate->total_credit < best->total_credit) return 0;
+
+    return schedule_avg_rating(candidate) > schedule_avg_rating(best);
+}
+
+static void backtrack(Schedule *cur,
+                      int start_idx,
+                      int mode,
+                      int max_credit,
+                      Schedule *best,
+                      int *found_best) {
+    if (has_all_required(cur) && meets_mode_condition(cur, mode)) {
+        if (is_better_schedule(cur, best, mode, *found_best)) {
+            *found_best = 1;
+            *best = *cur;
         }
     }
 
@@ -72,28 +82,26 @@ static void backtrack(Schedule *cur, int start_idx) {
     for (int i = start_idx; i < course_count; i++) {
         Course *c = &course_list[i];
 
-        if (cur->total_credit + c->credit > g_max_credit) continue;
+        if (cur->total_credit + c->credit > max_credit) continue;
         if (!can_add(cur, i)) continue;
 
-        cur->indices[cur->count++] = i;
+        cur->indices[cur->count] = i;
+        cur->count++;
         cur->total_credit += c->credit;
 
-        backtrack(cur, i + 1);
+        backtrack(cur, i + 1, mode, max_credit, best, found_best);
 
         cur->count--;
         cur->total_credit -= c->credit;
     }
 }
 
-static int run_optimizer(int max_credit, Schedule *result,
-                         ScoreFn score_fn, FilterFn filter_fn) {
-    g_found      = 0;
-    g_max_credit = max_credit;
-    g_score_fn   = score_fn;
-    g_filter_fn  = filter_fn;
-    memset(&g_best, 0, sizeof(Schedule));
-
+static int run_optimizer(int max_credit, Schedule *result, int mode) {
+    Schedule best;
     Schedule cur;
+    int found_best = 0;
+
+    memset(&best, 0, sizeof(Schedule));
     memset(&cur, 0, sizeof(Schedule));
 
     int required_count = 0;
@@ -105,7 +113,8 @@ static int run_optimizer(int max_credit, Schedule *result,
                        MAX_SELECTED);
                 return 0;
             }
-            cur.indices[cur.count++] = i;
+            cur.indices[cur.count] = i;
+            cur.count++;
             cur.total_credit += course_list[i].credit;
             required_count++;
         }
@@ -131,53 +140,23 @@ static int run_optimizer(int max_credit, Schedule *result,
                elective_count);
     }
 
-    backtrack(&cur, 0);
+    backtrack(&cur, 0, mode, max_credit, &best, &found_best);
 
-    if (!g_found) return 0;
+    if (!found_best) return 0;
 
-    *result = g_best;
+    *result = best;
     compute_stats(result);
     return 1;
 }
 
-static Score score_free_day(const Schedule *s) {
-    Score sc = {{0}, 0};
-    sc.len    = 3;
-    sc.key[0] = count_free_days(s);
-    sc.key[1] = s->total_credit;
-    sc.key[2] = schedule_avg_rating(s);
-    return sc;
-}
-
-static int filter_free_day(const Schedule *s) {
-    return count_free_days(s) >= 1;
-}
-
-static Score score_credit_then_rating(const Schedule *s) {
-    Score sc = {{0}, 0};
-    sc.len    = 2;
-    sc.key[0] = s->total_credit;
-    sc.key[1] = schedule_avg_rating(s);
-    return sc;
-}
-
-static int filter_no_first(const Schedule *s) {
-    return !has_period_1(s);
-}
-
-static int filter_always(const Schedule *s) {
-    (void)s;
-    return 1;
-}
-
 int optimize_free_day(int max_credit, Schedule *result) {
-    return run_optimizer(max_credit, result, score_free_day, filter_free_day);
+    return run_optimizer(max_credit, result, 1);
 }
 
 int optimize_no_first_period(int max_credit, Schedule *result) {
-    return run_optimizer(max_credit, result, score_credit_then_rating, filter_no_first);
+    return run_optimizer(max_credit, result, 2);
 }
 
 int optimize_high_rating(int max_credit, Schedule *result) {
-    return run_optimizer(max_credit, result, score_credit_then_rating, filter_always);
+    return run_optimizer(max_credit, result, 3);
 }
