@@ -3,9 +3,27 @@
 #include <string.h>
 #include "course.h"
 
+/*
+ * course.c
+ * --------
+ * 강의 정보를 입력받고, CSV 파일에서 읽고, 강의 목록을 화면에 출력하는 기능을
+ * 구현합니다. 문자열 처리와 포인터 이동이 많으므로 각 함수 주석에서 흐름을
+ * 자세히 설명합니다.
+ */
+
+/*
+ * 프로그램 전체에서 공유하는 강의 저장소입니다.
+ * course_list는 Course 구조체 100개를 담는 배열이고, course_count는 그중 실제로
+ * 몇 칸을 사용 중인지 나타냅니다.
+ */
 Course course_list[MAX_COURSES];
 int    course_count = 0;
 
+/*
+ * 정수를 안전하게 입력받습니다.
+ * fgets로 한 줄 전체를 문자열로 받은 뒤 sscanf로 정수 하나를 꺼냅니다.
+ * 사용자가 잘못 입력하면 for (;;) 무한 반복으로 다시 입력받습니다.
+ */
 int read_int(const char *prompt, int min_value, int max_value) {
     char line[128];
     for (;;) {
@@ -22,6 +40,7 @@ int read_int(const char *prompt, int min_value, int max_value) {
     }
 }
 
+/* read_int와 같은 방식으로 실수(float)를 입력받습니다. */
 float read_float(const char *prompt, float min_value, float max_value) {
     char line[128];
     for (;;) {
@@ -38,6 +57,10 @@ float read_float(const char *prompt, float min_value, float max_value) {
     }
 }
 
+/*
+ * 문자열 한 줄을 입력받습니다.
+ * buf는 호출한 쪽에서 준비한 char 배열의 주소이고, buf_size는 그 배열의 크기입니다.
+ */
 void read_line(const char *prompt, char *buf, int buf_size) {
     printf("%s", prompt);
     if (fgets(buf, buf_size, stdin) == NULL) {
@@ -47,6 +70,7 @@ void read_line(const char *prompt, char *buf, int buf_size) {
     buf[strcspn(buf, "\r\n")] = '\0';
 }
 
+/* 요일 번호를 화면에 출력할 한글 문자열로 바꿉니다. */
 const char *day_to_str(int d) {
     switch (d) {
         case MON: return "월";
@@ -58,6 +82,7 @@ const char *day_to_str(int d) {
     }
 }
 
+/* 문자열 안에서 요일 글자를 찾아 첫 번째로 발견된 요일 번호를 반환합니다. */
 int parse_day(const char *s) {
     if (strstr(s, "월")) return MON;
     if (strstr(s, "화")) return TUE;
@@ -67,6 +92,11 @@ int parse_day(const char *s) {
     return -1;
 }
 
+/*
+ * 문자열 앞뒤의 공백 문자를 제거합니다.
+ * char *s는 문자열의 첫 글자를 가리키는 포인터입니다. s++를 하면 다음 글자를
+ * 가리키게 되므로, 앞쪽 공백을 건너뛸 수 있습니다.
+ */
 static char *trim(char *s) {
     while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
 
@@ -80,6 +110,10 @@ static char *trim(char *s) {
     return s;
 }
 
+/*
+ * CSV 한 줄이 UTF-8 규칙을 따르는지 간단히 검사합니다.
+ * 한글은 여러 바이트로 저장되므로, 각 바이트 패턴이 UTF-8 형식에 맞는지 확인합니다.
+ */
 static int is_valid_utf8(const char *str) {
     const unsigned char *s = (const unsigned char *)str;
     while (*s) {
@@ -102,6 +136,10 @@ static int is_valid_utf8(const char *str) {
     return 1;
 }
 
+/*
+ * "월수금" 같은 문자열을 Course의 days 배열에 요일 번호로 저장합니다.
+ * Course *c를 받기 때문에 이 함수 안에서 c->days를 바꾸면 원래 Course가 바뀝니다.
+ */
 static void parse_days_into(Course *c, const char *day_text) {
     static const char *day_names[] = {"월", "화", "수", "목", "금"};
     c->day_count = 0;
@@ -112,6 +150,10 @@ static void parse_days_into(Course *c, const char *day_text) {
     }
 }
 
+/*
+ * 유니코드 문자 하나가 콘솔에서 차지하는 칸 수를 반환합니다.
+ * 영어는 보통 1칸, 한글은 보통 2칸을 차지하므로 표 정렬에 이 계산이 필요합니다.
+ */
 static int codepoint_display_width(unsigned int cp) {
     if (cp == 0 || cp < 32 || (cp >= 0x7F && cp < 0xA0)) return 0;
 
@@ -130,6 +172,11 @@ static int codepoint_display_width(unsigned int cp) {
     return 1;
 }
 
+/*
+ * UTF-8 문자열에서 문자 하나를 읽고, 포인터를 다음 문자 위치로 이동시킵니다.
+ * const char **s는 "문자열 포인터의 주소"입니다. 함수 안에서 *s 값을 바꾸면
+ * 호출한 쪽의 문자열 포인터도 다음 위치를 가리키게 됩니다.
+ */
 static unsigned int next_utf8_codepoint(const char **s) {
     const unsigned char *p = (const unsigned char *)*s;
 
@@ -175,6 +222,7 @@ static unsigned int next_utf8_codepoint(const char **s) {
     return p[0];
 }
 
+/* 문자열 전체가 콘솔에서 차지하는 폭을 계산합니다. */
 static int display_width(const char *s) {
     int width = 0;
     while (*s) {
@@ -184,14 +232,17 @@ static int display_width(const char *s) {
     return width;
 }
 
+/* 두 정수 중 큰 값을 반환합니다. */
 static int max_int(int a, int b) {
     return (a > b) ? a : b;
 }
 
+/* 표의 빈 칸을 맞추기 위해 공백을 count개 출력합니다. */
 static void print_padding(int count) {
     for (int i = 0; i < count; i++) putchar(' ');
 }
 
+/* 표 한 칸을 지정한 폭에 맞춰 왼쪽 또는 오른쪽 정렬로 출력합니다. */
 static void print_cell(const char *text, int width, int right_align) {
     int padding = width - display_width(text);
     if (padding < 0) padding = 0;
@@ -201,10 +252,12 @@ static void print_cell(const char *text, int width, int right_align) {
     if (!right_align) print_padding(padding);
 }
 
+/* 표 제목 아래에 들어가는 구분선(-)을 출력합니다. */
 static void print_rule_cell(int width) {
     for (int i = 0; i < width; i++) putchar('-');
 }
 
+/* Course의 요일 배열을 "월수금" 같은 출력용 문자열로 만듭니다. */
 static void print_course_days(const Course *c, char *buf, size_t buf_size) {
     if (buf_size == 0) return;
 
@@ -218,6 +271,10 @@ static void print_course_days(const Course *c, char *buf, size_t buf_size) {
     }
 }
 
+/*
+ * 사용자가 콘솔에서 직접 강의 정보를 입력하는 함수입니다.
+ * 입력된 강의는 전역 배열 course_list의 다음 빈 칸에 저장됩니다.
+ */
 void input_courses_manual(void) {
     int n = read_int("\n입력할 강의 수: ", 0, MAX_COURSES);
 
@@ -233,6 +290,7 @@ void input_courses_manual(void) {
 
         char day_buf[32];
         read_line("요일 (예: 월수 / 월수금 / 화목): ", day_buf, sizeof(day_buf));
+        /* 입력받은 요일 문자열을 숫자 배열로 바꿔 Course 안에 저장합니다. */
         parse_days_into(c, day_buf);
         if (c->day_count == 0) {
             printf("  ※ 요일을 알아보지 못해 월요일로 설정합니다.\n");
@@ -251,6 +309,10 @@ void input_courses_manual(void) {
     printf("\n[완료] 강의 %d개 입력 완료.\n", n);
 }
 
+/*
+ * CSV 파일에서 강의 목록을 읽어 course_list에 추가합니다.
+ * filename은 파일 이름 문자열의 주소입니다. 파일을 열 수 없으면 -1을 반환합니다.
+ */
 int load_courses_from_csv(const char *filename) {
     FILE *fp = fopen(filename, "r");
     if (!fp) {
@@ -258,6 +320,7 @@ int load_courses_from_csv(const char *filename) {
         return -1;
     }
 
+    /* UTF-8 BOM이 있으면 읽어서 건너뛰고, 없으면 rewind로 파일 처음으로 돌아갑니다. */
     unsigned char bom[3] = {0};
     size_t got = fread(bom, 1, 3, fp);
     if (!(got == 3 && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF)) {
@@ -269,6 +332,7 @@ int load_courses_from_csv(const char *filename) {
     int line_no = 1;
     int warned_encoding = 0;
 
+    /* 첫 줄은 CSV 제목 행이므로 읽기만 하고 실제 강의로 저장하지 않습니다. */
     if (fgets(line, sizeof(line), fp) == NULL) {
         fclose(fp);
         printf("[완료] CSV에서 강의 0개 로드 완료.\n");
@@ -278,6 +342,7 @@ int load_courses_from_csv(const char *filename) {
     while (fgets(line, sizeof(line), fp) && course_count < MAX_COURSES) {
         line_no++;
 
+        /* 빈 줄인지 확인하기 위해 p 포인터를 줄 앞쪽 공백 뒤로 이동합니다. */
         const char *p = line;
         while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
         if (*p == '\0') continue;
@@ -288,6 +353,10 @@ int load_courses_from_csv(const char *filename) {
             warned_encoding = 1;
         }
 
+        /*
+         * strtok은 line 문자열을 쉼표 기준으로 잘라 각 칸의 시작 주소를 반환합니다.
+         * 두 번째 호출부터 NULL을 넣는 것은 "직전 문자열에서 계속 자르라"는 뜻입니다.
+         */
         char *name_tok  = strtok(line, ",");
         char *prof_tok  = strtok(NULL, ",");
         char *day_tok   = strtok(NULL, ",");
@@ -303,6 +372,7 @@ int load_courses_from_csv(const char *filename) {
             continue;
         }
 
+        /* 각 칸의 앞뒤 공백을 제거하고, 숫자 칸은 atoi/atof로 숫자 타입으로 바꿉니다. */
         char *name     = trim(name_tok);
         char *prof     = trim(prof_tok);
         char *days     = trim(day_tok);
@@ -331,6 +401,7 @@ int load_courses_from_csv(const char *filename) {
 
         required = (required == 1) ? 1 : 0;
 
+        /* 검증을 통과한 CSV 한 줄을 Course 구조체에 복사합니다. */
         Course *c = &course_list[course_count];
         memset(c, 0, sizeof(Course));
         for (int d = 0; d < MAX_DAYS; d++) c->days[d] = -1;
@@ -360,6 +431,10 @@ int load_courses_from_csv(const char *filename) {
     return loaded;
 }
 
+/*
+ * 현재 저장된 강의 목록을 표 형태로 출력합니다.
+ * 먼저 각 열에 필요한 폭을 계산한 뒤, 제목/구분선/데이터 행을 차례로 출력합니다.
+ */
 void print_course_list(void) {
     int no_width = 4;
     int name_width = 20;
@@ -368,6 +443,7 @@ void print_course_list(void) {
     int number_width = 5;
     int required_width = 6;
 
+    /* 1단계: 모든 강의를 훑으며 각 열의 최대 출력 폭을 구합니다. */
     for (int i = 0; i < course_count; i++) {
         Course *c = &course_list[i];
 
@@ -381,6 +457,7 @@ void print_course_list(void) {
                                  display_width(c->is_required ? "필수" : "선택"));
     }
 
+    /* 2단계: 표 제목과 제목 아래 구분선을 출력합니다. */
     printf("\n");
     print_cell("No", no_width, 0);           putchar(' ');
     print_cell("강의명", name_width, 0);     putchar(' ');
@@ -402,6 +479,7 @@ void print_course_list(void) {
     print_rule_cell(number_width);    putchar(' ');
     print_rule_cell(required_width);  putchar('\n');
 
+    /* 3단계: 각 강의를 한 줄씩 출력합니다. 숫자는 문자열로 바꾼 뒤 표 칸에 맞춥니다. */
     for (int i = 0; i < course_count; i++) {
         Course *c = &course_list[i];
 

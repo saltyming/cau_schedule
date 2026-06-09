@@ -5,13 +5,24 @@
 #include "display.h"
 #include "export.h"
 
+/*
+ * main.c
+ * ------
+ * 프로그램의 시작점입니다. 사용자가 메뉴에서 무엇을 선택했는지에 따라
+ * 강의를 입력하거나, CSV를 불러오거나, 최적 시간표를 생성하는 함수를 호출합니다.
+ */
+
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
 #  include <windows.h>
 #endif
 
-#define RESULT_FILE   "result_schedules.csv"
+#define RESULT_FILE   "result_schedules.csv"  /* 생성된 시간표를 저장할 기본 파일명 */
 
+/*
+ * Windows 콘솔에서 한글 UTF-8 출력이 깨지지 않도록 설정합니다.
+ * #ifdef _WIN32 안의 코드는 Windows에서만 컴파일되고, macOS/Linux에서는 비어 있습니다.
+ */
 static void enable_utf8_console(void) {
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
@@ -19,6 +30,11 @@ static void enable_utf8_console(void) {
 #endif
 }
 
+/*
+ * 테스트용 CSV 파일을 직접 만들어 줍니다.
+ * FILE *fp는 파일을 가리키는 포인터입니다. fopen이 성공하면 파일에 쓸 수 있는
+ * 통로를 돌려주고, 실패하면 NULL을 돌려줍니다.
+ */
 static void create_sample_csv(void) {
     FILE *fp = fopen("sample_courses.csv", "w");
     if (!fp) {
@@ -26,10 +42,12 @@ static void create_sample_csv(void) {
         return;
     }
 
+    /* Excel이 UTF-8 파일임을 알아보도록 BOM 3바이트를 먼저 씁니다. */
     fputc(0xEF, fp);
     fputc(0xBB, fp);
     fputc(0xBF, fp);
 
+    /* fprintf는 printf와 비슷하지만 화면이 아니라 fp가 가리키는 파일에 씁니다. */
     fprintf(fp, "강의명,교수명,요일,시작교시,종료교시,학점,평점,필수여부\n");
     fprintf(fp, "컴퓨터구조,김철수,월수,2,3,3,4.3,1\n");
     fprintf(fp, "운영체제,이영희,화목,3,4,3,4.1,1\n");
@@ -46,6 +64,7 @@ static void create_sample_csv(void) {
     printf("  ※ 샘플 파일 'sample_courses.csv' 생성 완료.\n\n");
 }
 
+/* 프로그램 제목과 간단한 안내 문구를 출력합니다. */
 static void print_banner(void) {
     printf("\n");
     printf("╔══════════════════════════════════════════════════╗\n");
@@ -55,6 +74,7 @@ static void print_banner(void) {
     printf("  · 만들어진 시간표는 '%s' 파일로도 저장됩니다.\n", RESULT_FILE);
 }
 
+/* 사용자가 선택할 수 있는 메뉴를 매 반복마다 화면에 보여 줍니다. */
 static void print_menu(void) {
     printf("\n  ─── 메뉴 ─────────────────────────────────────\n");
     printf("  [1] 강의 직접 입력\n");
@@ -71,6 +91,7 @@ static void print_menu(void) {
     printf("  ────────────────────────────────────────────────\n");
 }
 
+/* mode 번호를 사람이 읽기 쉬운 제목 문자열로 바꿉니다. */
 static const char *mode_title(int mode) {
     switch (mode) {
         case 1: return "[모드 1] 공강 하루 만들기 시간표";
@@ -80,6 +101,11 @@ static const char *mode_title(int mode) {
     }
 }
 
+/*
+ * 사용자가 고른 모드 번호에 맞는 최적화 함수를 호출합니다.
+ * out은 결과를 받을 Schedule 구조체의 주소입니다. 함수 안에서 *out의 내용을 채우기
+ * 때문에, 구조체를 복사해서 받지 않고 주소를 넘깁니다.
+ */
 static int generate(int mode, int max_credit, Schedule *out) {
     switch (mode) {
         case 1: return optimize_free_day(max_credit, out);
@@ -89,6 +115,7 @@ static int generate(int mode, int max_credit, Schedule *out) {
     }
 }
 
+/* 모드 하나만 실행하고, 화면 출력과 CSV 저장까지 처리합니다. */
 static void run_single_mode(int mode, int max_credit) {
     printf("\n  [진행] 최적 시간표를 탐색 중입니다...\n");
 
@@ -102,6 +129,7 @@ static void run_single_mode(int mode, int max_credit) {
     const char *title = mode_title(mode);
     display_summary(&result, title);
 
+    /* save_schedules_csv는 여러 시간표를 저장할 수 있으므로, 1개짜리 배열로 넘깁니다. */
     const char *titles[1] = { title };
     Schedule   scheds[1] = { result };
     if (save_schedules_csv(RESULT_FILE, titles, scheds, 1)) {
@@ -109,6 +137,7 @@ static void run_single_mode(int mode, int max_credit) {
     }
 }
 
+/* 세 가지 모드를 모두 실행하고, 성공한 결과들을 한 CSV 파일에 모아 저장합니다. */
 static void run_all_modes(int max_credit) {
     Schedule    scheds[3];
     const char *titles[3];
@@ -136,6 +165,10 @@ static void run_all_modes(int max_credit) {
     }
 }
 
+/*
+ * C 프로그램은 main 함수에서 시작합니다.
+ * do-while 반복문은 메뉴를 최소 한 번 보여 준 뒤, 사용자가 0을 고를 때까지 반복합니다.
+ */
 int main(void) {
     enable_utf8_console();
     print_banner();
@@ -145,6 +178,7 @@ int main(void) {
         print_menu();
         choice = read_int("  선택 > ", 0, 8);
 
+        /* switch는 choice 값에 따라 실행할 case를 고르는 문법입니다. */
         switch (choice) {
             case 1:
                 input_courses_manual();

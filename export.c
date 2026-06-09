@@ -1,8 +1,19 @@
 #include <stdio.h>
 #include "export.h"
 
+/*
+ * export.c
+ * --------
+ * 시간표 결과를 CSV 파일로 저장합니다. CSV는 쉼표로 칸을 구분하는 텍스트 파일이라
+ * Excel 같은 프로그램에서 쉽게 열 수 있습니다.
+ */
+
 static const char *DAY_NAMES[] = {"월", "화", "수", "목", "금"};
 
+/*
+ * CSV 한 칸을 안전하게 씁니다.
+ * 값 안에 쉼표, 큰따옴표, 줄바꿈이 있으면 큰따옴표로 감싸야 CSV 형식이 깨지지 않습니다.
+ */
 static void write_csv_field(FILE *fp, const char *s) {
     int needs_quote = 0;
     for (const char *p = s; *p; p++) {
@@ -25,6 +36,7 @@ static void write_csv_field(FILE *fp, const char *s) {
     fputc('"', fp);
 }
 
+/* 시간표 표를 어디까지 출력할지 정하기 위해 가장 늦게 끝나는 교시를 찾습니다. */
 static int last_used_period(const Schedule *s) {
     int last = 1;
     for (int i = 0; i < s->count; i++) {
@@ -34,6 +46,7 @@ static int last_used_period(const Schedule *s) {
     return last;
 }
 
+/* 요일을 열로, 교시를 행으로 하는 시간표 격자를 CSV에 씁니다. */
 static void write_grid(FILE *fp, const Schedule *s) {
 
     fputs("교시", fp);
@@ -57,6 +70,7 @@ static void write_grid(FILE *fp, const Schedule *s) {
     }
 }
 
+/* 총 학점, 평균 평점, 공강 요일, 강의 목록 같은 요약 정보를 CSV에 씁니다. */
 static void write_summary(FILE *fp, const Schedule *s) {
     fprintf(fp, "총 학점,%d\n", s->total_credit);
     fprintf(fp, "평균 평점,%.2f\n", s->avg_rating);
@@ -99,6 +113,10 @@ static void write_summary(FILE *fp, const Schedule *s) {
     }
 }
 
+/*
+ * 여러 개의 시간표를 하나의 CSV 파일에 저장합니다.
+ * 성공하면 1, 파일 열기에 실패하면 0을 반환합니다.
+ */
 int save_schedules_csv(const char *path, const char *titles[],
                        const Schedule schedules[], int count) {
     FILE *fp = fopen(path, "w");
@@ -107,6 +125,7 @@ int save_schedules_csv(const char *path, const char *titles[],
         return 0;
     }
 
+    /* Excel이 한글 UTF-8 CSV를 잘 인식하도록 BOM을 씁니다. */
     fputc(0xEF, fp);
     fputc(0xBB, fp);
     fputc(0xBF, fp);
